@@ -1,0 +1,101 @@
+﻿@page "/crownscanner"
+@using Microsoft.Extensions.Logging
+@inject ILogger<CrownScanner> Logger
+
+<PageTitle>Crown Formatter</PageTitle>
+
+<div class="container-fluid">
+    <h6>Copy and paste from your Last.fm artist page and get a crown scannable output.</h6>
+    <div class="row">
+        <EditForm Model="@csInput" OnSubmit="@HandleSubmit" class="col">
+
+            <InputTextArea id="CrownFormaterInput" @bind-Value="csInput.InputString" rows="15" class="form-control"/>
+            <br />
+            <button type="submit" class="btn btn-dark">Submit</button>
+            <InputCheckbox id="inputBool" style="vertical-align:inherit" class="form-check-input" @bind-Value="csInput.useMultiArtistOutput" />
+            <label class="form-check-label" for="inputBool">Use multiple artist per line</label>
+
+        </EditForm>
+        <div class="col">
+
+            <textarea id="CrownFormatterOutput" rows="15" class="form-control" readonly>@outputString</textarea>
+
+        </div>
+    </div>
+</div>
+
+<h5 id="noInputWarning" class="validation-message alert-warning" hidden=@hideWarning>@warningText</h5>
+
+@code {
+    private string warningText = "Try inputing some text, dude!";
+    private bool hideWarning = true;
+    private CrownFormatterInput csInput = new();
+    private string outputString = "";
+    private List<string> artistListOutput { get; set; } = new List<string>();
+
+    public class CrownFormatterInput
+    {
+        public string? InputString { get; set; }
+        public bool useMultiArtistOutput { get; set; } = false;
+    }
+
+    private void HandleSubmit()
+    {
+        if (csInput.InputString != null && csInput.InputString.Length > 0)
+            hideWarning = true;
+        else
+        { 
+            hideWarning = false;
+            return;
+        }
+
+        var artistList = new List<string>(csInput.InputString!
+            .Split(new string[] { "\r\n", "\r", "\n" }, StringSplitOptions.None));
+
+        artistList.RemoveAll(s => s == "");
+        artistListOutput = FormatCrowns(artistList, csInput.useMultiArtistOutput);
+        outputString = string.Join("\n", artistListOutput);
+
+        // artistListOutput.ForEach(x => Logger.LogInformation(x));
+    }
+
+    private List<string> FormatCrowns(List<string> artistList, bool multipleArtistPerLine)
+    {
+        var singleArtists = new List<string>();
+        var multipleArtists = new List<string>();
+        var artistLine = "";
+        var artistCount = 0;
+
+        for (var i = 1; i <= artistList.Count; i++)
+        {
+            var selectedArtist = artistList[i - 1];
+            if (int.TryParse(selectedArtist, out _) || selectedArtist.StartsWith("Avatar for")
+                || selectedArtist.Contains("scrobbles") || selectedArtist == string.Empty)
+            {
+                continue;
+            }
+
+            // No Duplicates
+            if (singleArtists.Contains(selectedArtist))
+                continue;
+
+            singleArtists.Add($"!c {selectedArtist}");
+            artistLine += $" {selectedArtist} |";
+            artistCount++;
+
+            if (artistCount % 10 == 0)
+            {
+                multipleArtists.Add("!cm" + artistLine.Remove(artistLine.Length - 1));
+                artistLine = string.Empty;
+                artistCount = 0;
+            }
+            else if (artistCount % 10 != 0 && i == artistList.Count)
+            {
+                multipleArtists.Add("!cm" + artistLine.Remove(artistLine.Length - 1));
+            }
+        }
+
+        return multipleArtistPerLine ? multipleArtists : singleArtists;
+    }
+
+}
